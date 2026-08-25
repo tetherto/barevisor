@@ -7,6 +7,8 @@
 const process = require('process')
 const b4a = require('b4a')
 const Sandbox = require('../sandbox')
+const Localdrive = require('localdrive')
+const path = require('path')
 
 const DECK = `
 from pptx import Presentation
@@ -49,6 +51,10 @@ async function main() {
   for await (const chunk of sandbox.out.createReadStream('/deck.pptx')) bytes += chunk.length
 
   console.log('streamed', bytes, 'bytes off the guest, host staging dir:', sandbox.staging)
+
+  // pipe it out
+  // const out = new Localdrive(path.join(__dirname, 'out'))
+  // sandbox.out.createReadStream('/deck.pptx').pipe(out.createWriteStream('deck.pptx'))
 
   await sandbox.close()
 }
