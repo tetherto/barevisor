@@ -22,12 +22,9 @@ jobs:
     steps:
       - uses: holepunchto/actions/bare-base@v1
       - run: npm test
-  # the linux driver boots a kernel and reaches our own init, but the guest agent
-  # is not reachable yet, so this job reports without blocking a merge
   boot:
     runs-on: ubuntu-latest
     name: Boot
-    continue-on-error: true
     steps:
       - uses: holepunchto/actions/node-base@v1
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86

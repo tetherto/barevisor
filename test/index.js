@@ -523,7 +523,7 @@ test('alpine listens on the transport the driver speaks', function (t) {
   image.transport = 'vport'
 
   t.ok(image.init().includes('port=$(/agent/vport port-5555) || fail vport'))
-  t.ok(image.init().includes('socat -d -d GOPEN:$port UNIX-CONNECT:/run/agent.sock'))
+  t.ok(image.init().includes('socat GOPEN:$port UNIX-CONNECT:/run/agent.sock'))
   t.absent(image.init().includes('vmw_vsock_virtio_transport'))
 })
 
