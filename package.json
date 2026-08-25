@@ -79,6 +79,7 @@
     "bare-os": "^3.9.3",
     "bare-path": "^3.0.1",
     "bare-process": "^4.5.1",
+    "bare-storage": "^1.1.0",
     "bare-subprocess": "^6.1.0",
     "bare-zlib": "^1.4.1",
     "localdrive": "^2.2.1",

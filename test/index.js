@@ -7,6 +7,7 @@ const zlib = require('zlib')
 const test = require('brittle')
 
 const b4a = require('b4a')
+const storage = require('bare-storage')
 const Barevisor = require('..')
 const VM = require('../lib/vm')
 const LinuxVM = require('../lib/vm/linux')
@@ -223,6 +224,13 @@ test('concurrent images sharing a cache do not corrupt it', async function (t) {
     ['initramfs', 'vmlinuz'],
     'no temporary files left behind'
   )
+})
+
+test('image caches images where they survive a restart', function (t) {
+  const cache = new Image(null, {}).cache
+
+  t.is(cache, path.join(storage.persistent(), 'barevisor'))
+  t.is(new Image(null, { cache: '/tmp/images' }).cache, '/tmp/images')
 })
 
 test('image without a drive uses the paths it was given', async function (t) {

@@ -31,7 +31,7 @@ const { stdout } = await vm.exec('python3 -c "print(1 + 1)"')
 await vm.close()
 ```
 
-The kernel and initramfs download to `~/.cache/barevisor` on first boot and are reused after.
+The kernel and initramfs download once and are reused after, into the per-user directory [`bare-storage`](https://github.com/holepunchto/bare-storage) reports as persistent — `~/Library/Application Support/barevisor` on macOS, `$XDG_DATA_HOME/barevisor` on Linux, `%APPDATA%\\barevisor` on Windows.
 
 ## API
 
@@ -203,7 +203,7 @@ Alpine Linux from the netboot mirror, with the guest agent baked into the initra
   arch: 'aarch64',     // defaults to the host architecture
   mirror: '...',       // alpine mirror url, used by apk inside the guest
   drive: null,         // where to read vmlinuz/initramfs from, defaults to the mirror over https
-  cache: '~/.cache/barevisor',
+  cache: '...',         // defaults to the persistent per-user directory
   agent: true          // set false for a stock image with no agent
 }
 ```
