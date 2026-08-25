@@ -15,9 +15,9 @@ npm install barevisor
 ## Usage
 
 ```js
-const Linux = require('barevisor')
+const Barevisor = require('barevisor')
 
-const vm = new Linux({
+const vm = new Barevisor({
   cpus: 4,
   memory: '4gb',
   packages: ['python3'],
@@ -35,7 +35,7 @@ The kernel and initramfs download to `~/.cache/barevisor` on first boot and are 
 
 ## API
 
-#### `const vm = new Linux(opts)`
+#### `const vm = new Barevisor(opts)`
 
 A VM on the driver for the current platform. Construction is cheap and does no work — `await vm.ready()` boots the guest and waits for its agent.
 
@@ -120,7 +120,7 @@ With `disk: false` nothing is shared with the host filesystem at all — see [St
 
 #### `const sandbox = new Sandbox(opts)`
 
-Takes everything `Linux` and `Alpine` take, plus:
+Takes everything `Barevisor` and `Alpine` take, plus:
 
 ```js
 {
@@ -213,7 +213,7 @@ Pass `drive` to boot from files you already have, with no network at all:
 ```js
 const Localdrive = require('localdrive')
 
-const vm = new Linux({ image: new Alpine({ drive: new Localdrive('./images') }) })
+const vm = new Barevisor({ image: new Alpine({ drive: new Localdrive('./images') }) })
 ```
 
 or from your Peers
@@ -221,7 +221,7 @@ or from your Peers
 ```js
 const Hyperdrive = require('hyperdrive')
 
-const vm = new Linux({ image: new Alpine({ drive: new Hyperdrive(store) }) })
+const vm = new Barevisor({ image: new Alpine({ drive: new Hyperdrive(store) }) })
 ```
 
 #### `const image = new Image(drive, opts)`

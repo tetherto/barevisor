@@ -4,14 +4,14 @@ const path = require('path')
 const process = require('process')
 const Localdrive = require('localdrive')
 const quote = require('./lib/shell-quote')
-const Linux = require('./')
+const Barevisor = require('./')
 const SandboxImage = require('./lib/image/sandbox')
 const PortPool = require('./lib/port-pool')
 const StreamDrive = require('./lib/stream-drive')
 
-module.exports = class Sandbox extends Linux {
+module.exports = class Sandbox extends Barevisor {
   constructor(opts = {}) {
-    const dir = opts.dir || path.join(os.tmpdir(), 'linux-sandbox-' + process.pid)
+    const dir = opts.dir || path.join(os.tmpdir(), 'barevisor-sandbox-' + process.pid)
     const image = opts.image || new SandboxImage(opts)
     const disk = opts.disk ?? true
     const transfers = disk ? [] : ports(image.agentPort + 1, opts.transfers ?? 4)

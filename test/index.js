@@ -7,7 +7,7 @@ const zlib = require('zlib')
 const test = require('brittle')
 
 const b4a = require('b4a')
-const Linux = require('..')
+const Barevisor = require('..')
 const VM = require('../lib/vm')
 const LinuxVM = require('../lib/vm/linux')
 const which = require('../lib/vm/which')
@@ -30,8 +30,8 @@ test('ready boots the vm', async function (t) {
   t.ok(vm.opened)
 })
 
-test('linux is a platform driver with a default alpine image', function (t) {
-  const vm = new Linux({ packages: ['python3'] })
+test('barevisor is a platform driver with a default alpine image', function (t) {
+  const vm = new Barevisor({ packages: ['python3'] })
 
   t.ok(vm instanceof VM)
   t.ok(vm.image instanceof Alpine)
@@ -116,7 +116,7 @@ test('close is idempotent', async function (t) {
 
 test('vm is the base class of every driver', function (t) {
   t.ok(MockVM.prototype instanceof VM)
-  t.ok(Linux.prototype instanceof VM)
+  t.ok(Barevisor.prototype instanceof VM)
 })
 
 test('vm takes its agent and network defaults from the image', function (t) {
@@ -516,7 +516,7 @@ test('mounts use the fs type and options the driver asks for', async function (t
 })
 
 test('the agent wait gives up when the socket connects but never answers', async function (t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'linux-silent-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'barevisor-silent-'))
   const socket = path.join(dir, 'agent.sock')
   const accepted = []
 
@@ -609,8 +609,8 @@ test('linux only adds a network device when the image wants one', function (t) {
 })
 
 test('which resolves absolute candidates and gives up on unknown names', function (t) {
-  t.is(which(['linux-not-a-real-binary', process.execPath]), process.execPath)
-  t.is(which(['linux-not-a-real-binary']), null)
+  t.is(which(['barevisor-not-a-real-binary', process.execPath]), process.execPath)
+  t.is(which(['barevisor-not-a-real-binary']), null)
 })
 
 async function create(t) {
@@ -639,7 +639,7 @@ function values(args, flag) {
 }
 
 function cache(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'linux-cache-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'barevisor-cache-'))
   t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }))
   return { cache: dir }
 }

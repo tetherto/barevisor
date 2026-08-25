@@ -9,7 +9,7 @@ module.exports = class MockVM extends VM {
   constructor(opts = {}) {
     super(opts)
 
-    this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'linux-mock-'))
+    this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'barevisor-mock-'))
     this.server = null
     this.connections = new Set()
   }

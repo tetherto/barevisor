@@ -198,6 +198,6 @@ export class StreamDrive {
   createWriteStream(key: string): Writable
 }
 
-export default class Linux extends VM {
+export default class Barevisor extends VM {
   constructor(opts?: VMOptions & AlpineOptions)
 }

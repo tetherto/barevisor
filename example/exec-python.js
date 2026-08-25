@@ -5,7 +5,7 @@
 
 const path = require('path')
 const process = require('process')
-const Linux = require('..')
+const Barevisor = require('..')
 
 main().catch((err) => {
   console.error(err)
@@ -13,7 +13,7 @@ main().catch((err) => {
 })
 
 async function main() {
-  const vm = new Linux({
+  const vm = new Barevisor({
     cpus: 2,
     memory: '1gb',
     packages: ['python3'],

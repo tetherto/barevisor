@@ -4,7 +4,7 @@
 //   node example/port-echo.js
 
 const process = require('process')
-const Linux = require('..')
+const Barevisor = require('..')
 
 const PORT = 1234
 
@@ -14,7 +14,7 @@ main().catch((err) => {
 })
 
 async function main() {
-  const vm = new Linux({ ports: [PORT] })
+  const vm = new Barevisor({ ports: [PORT] })
 
   await vm.ready()
 
