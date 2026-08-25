@@ -1,6 +1,6 @@
 {
   "name": "barevisor",
-  "version": "5.0.0",
+  "version": "0.0.0",
   "description": "Cross-platform sandboxed VMs for Node and Bare",
   "main": "index.js",
   "exports": {
