@@ -233,4 +233,4 @@ Both run under `bare` too.
 
 ## License
 
-ISC
+Apache-2.0

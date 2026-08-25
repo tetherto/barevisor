@@ -68,7 +68,7 @@
   "scripts": {
     "format": "prettier . --write",
     "test": "brittle-node test/index.js && brittle-bare test/index.js",
-    "lint": "prettier . --check && lunte && tsc --noEmit index.d.ts"
+    "lint": "prettier . --check && lunte && tsc --noEmit --skipLibCheck --strict --target es2022 --moduleResolution node index.d.ts"
   },
   "dependencies": {
     "b4a": "^1.8.1",
@@ -93,12 +93,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tetherto/linux.git"
+    "url": "git+https://github.com/tetherto/linux.git"
   },
   "author": "Tether Inc",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/tetherto/linux/issues"
   },
-  "homepage": "https://github.com/tetherto/linux"
+  "homepage": "https://github.com/tetherto/linux#readme"
 }
