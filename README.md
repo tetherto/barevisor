@@ -77,7 +77,7 @@ The other half of `vm.connect`: start a listener on a guest port and wire it to 
 ```js
 const listener = await vm.listen(1234, 'EXEC:/bin/cat')
 
-const socket = vm.connect(1234)
+const socket = await listener.connect()
 socket.write('hello\n')
 
 await listener.close()

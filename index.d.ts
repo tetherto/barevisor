@@ -137,6 +137,7 @@ export class VM extends ReadyResource {
   readonly timeout: number
   readonly transport: string
   readonly guestReady: string | null
+  readonly dialsFirst: boolean
 
   mountType: string
   mountOptions: string

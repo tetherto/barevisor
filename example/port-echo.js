@@ -20,7 +20,7 @@ async function main() {
 
   const listener = await vm.listen(PORT, 'EXEC:/bin/cat')
 
-  const socket = vm.connect(PORT)
+  const socket = await listener.connect()
   socket.write('hello from the host\n')
 
   const reply = await new Promise((resolve, reject) => {

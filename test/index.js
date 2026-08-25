@@ -398,6 +398,20 @@ test('stream drive reads nothing for a missing key', async function (t) {
   await t.exception(drive.get('/missing.txt'), /Not found/)
 })
 
+test('a backend that needs the host first dials before the guest opens its end', async function (t) {
+  const dialing = new MockGuest()
+  dialing.dialsFirst = true
+
+  const dialed = await dialing.listen(1234, 'EXEC:/bin/cat')
+
+  t.ok(dialed.socket)
+  t.is(await dialed.connect(), dialed.socket)
+
+  const listening = await new MockGuest().listen(1234, 'EXEC:/bin/cat')
+
+  t.is(listening.socket, null)
+})
+
 test('listen is bidirectional unless a transfer says which way', async function (t) {
   const duplex = new MockGuest()
   await duplex.listen(1234, 'EXEC:/bin/cat')
