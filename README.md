@@ -97,6 +97,8 @@ await sandbox.close()
 
 Two directories are shared with the host and nothing else: `in` is where you put the script and its inputs, mounted read-only in the guest, and `out` is the only writable path, where artifacts come back. Both are [`localdrive`](https://github.com/holepunchto/localdrive) instances.
 
+With `disk: false` nothing is shared with the host filesystem at all — see [Streaming](#streaming).
+
 #### `const sandbox = new Sandbox(opts)`
 
 Takes everything `Linux` and `Alpine` take, plus:
@@ -109,6 +111,8 @@ Takes everything `Linux` and `Alpine` take, plus:
   user: 'sandbox',     // unprivileged user that runs the code
   uid: 1000,
   workspace: '/sandbox',
+  disk: true,          // false streams in/out over vsock instead of mounting
+  transfers: 4,        // concurrent transfers when disk is false
   env: {},             // environment exported for every run
   cpuTime: 30,         // rlimit on cpu seconds, also the default run timeout
   maxFileSize: 67108864,
@@ -131,6 +135,26 @@ install: [Sandbox.pip(['python-pptx']), Sandbox.npm(['left-pad'])]
 
 `npm` passes `--ignore-scripts`, so installing a package cannot execute that package's own code. It installs globally by default; pass `{ prefix: '/sandbox' }` to install into a directory instead. npm cannot do a local install at `/`, which is why there is no unprefixed local mode.
 
+### Streaming
+
+`disk: false` shares no host directory. The workspace is the guest's own tmpfs — the initramfs root is already RAM — and `in`/`out` become `StreamDrive` instances that move bytes over vsock, so a file's only copy is in guest memory unless you write it somewhere yourself.
+
+```js
+const sandbox = new Sandbox({ disk: false, packages: ['python3'] })
+
+await sandbox.ready()
+await sandbox.in.put('/deck.py', script)
+await sandbox.run('python3 ../in/deck.py')
+
+sandbox.out.createReadStream('/deck.pptx').pipe(drive.createWriteStream('/deck.pptx'))
+```
+
+`StreamDrive` offers the same surface as a localdrive — `get`, `put`, `entry`, `list`, `del`, `createReadStream`, `createWriteStream` — so the two modes are interchangeable.
+
+Reads stream at any size. Writes buffer the payload on the host before sending it, because vfkit never propagates a socket close into the guest: neither side can use EOF to end a transfer, so both directions are bounded by an explicit byte count, which reads take from the file and writes from the payload. Inputs are usually small, so buffering them is cheap; large artifacts move in the direction that streams. Agent v2 replaces this with framed channels and removes both the buffering and the transfer port pool.
+
+Transfers need a vsock port each, reserved at boot, so `transfers` caps how many can run at once.
+
 ### What the sandbox does and does not guarantee
 
 The boundary that matters is the VM: the guest has its own kernel and reaches the host only through the devices configured for it. Inside that, code runs as uid 1000 on an ephemeral tmpfs, cannot traverse into the agent or write anywhere but `out/`, and is capped on cpu time, file size and process count.
@@ -139,6 +163,7 @@ What it does not do yet:
 
 - **Network egress is not restricted by default.** Packages install at boot over the network, so `offline: true` drops the interface _after_ the install — it does not stop a package's install from reaching the network in the first place. A guest image with packages baked in removes that window; see the roadmap.
 - **`--ignore-scripts` breaks native modules.** Anything that compiles or downloads a binary during install will not work, because that is exactly the code being suppressed. Use prebuilt wheels via a mount instead.
+- **`disk: false` keeps file contents off the host, not the VM's own bookkeeping.** vfkit's vsock sockets and the kernel console log still live in a temp directory, and guest RAM can be paged out by the host, so this is not a defence against disk forensics.
 
 ## Images
 
@@ -220,6 +245,7 @@ On macOS install [vfkit](https://github.com/crc-org/vfkit) with `brew install vf
 
 - `node example/exec-python.js` — boot an Alpine guest with python3 and run code in it
 - `node example/sandbox-pptx.js` — build a PowerPoint deck with python-pptx in a sealed guest and read it back
+- `node example/sandbox-stream.js` — the same deck with nothing shared with the host filesystem
 - `node example/sandbox-offline.js` — install packages at boot, then run with the network dropped
 - `node example/vsock-echo.js` — round-trip a message over a vsock port with `vm.connect()`
 

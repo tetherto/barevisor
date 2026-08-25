@@ -13,6 +13,10 @@ const cpio = require('../lib/cpio')
 const zboot = require('../lib/zboot')
 const quote = require('../lib/shell-quote')
 const SandboxImage = require('../lib/image/sandbox')
+const PortPool = require('../lib/port-pool')
+const StreamDrive = require('../lib/stream-drive')
+const Sandbox = require('../sandbox')
+const MockGuest = require('./helpers/guest')
 const MockVM = require('./helpers/mock')
 const MockDrive = require('./helpers/drive')
 
@@ -325,6 +329,79 @@ test('sandbox image collects install steps in order', function (t) {
   t.ok(setup.indexOf('adduser') < setup.indexOf('pip install'))
   t.ok(setup.indexOf('pip install') < setup.indexOf('npm install'))
   t.ok(setup.includes("--global 'sfw'"))
+})
+
+test('port pool hands out ports and queues once empty', async function (t) {
+  const pool = new PortPool([1, 2])
+
+  const first = await pool.acquire()
+  const second = await pool.acquire()
+
+  t.alike([first, second].sort(), [1, 2])
+
+  let third = null
+  pool.acquire().then((port) => {
+    third = port
+  })
+
+  t.is(third, null, 'waits while the pool is empty')
+
+  pool.release(first)
+  await Promise.resolve()
+
+  t.is(third, first, 'the waiter gets the released port')
+})
+
+test('stream drive resolves keys against its guest root', function (t) {
+  const drive = new StreamDrive(new MockGuest(), '/sandbox/out')
+
+  t.is(drive._path('/deck.pptx'), '/sandbox/out/deck.pptx')
+  t.is(drive._path('deck.pptx'), '/sandbox/out/deck.pptx')
+})
+
+test('stream drive reports entries from the guest', async function (t) {
+  const guest = new MockGuest({ '/sandbox/out/deck.pptx': 'PK-and-more' })
+  const drive = new StreamDrive(guest, '/sandbox/out')
+
+  const entry = await drive.entry('/deck.pptx')
+
+  t.is(entry.value.blob.byteLength, 11)
+  t.is(await drive.entry('/missing.txt'), null)
+})
+
+test('stream drive lists what the guest holds', async function (t) {
+  const guest = new MockGuest({ '/sandbox/out/a.txt': 'a', '/sandbox/out/b.txt': 'bb' })
+  const drive = new StreamDrive(guest, '/sandbox/out')
+
+  const keys = []
+  for await (const entry of drive.list()) keys.push(entry.key)
+
+  t.alike(keys.sort(), ['/a.txt', '/b.txt'])
+})
+
+test('stream drive reads nothing for a missing key', async function (t) {
+  const drive = new StreamDrive(new MockGuest(), '/sandbox/out', { pool: new PortPool([1]) })
+
+  await t.exception(drive.get('/missing.txt'), /Not found/)
+})
+
+test('sandbox in stream mode shares no host directory', function (t) {
+  const streaming = new Sandbox({ disk: false })
+
+  t.is(streaming.staging, null)
+  t.alike(streaming.mounts, {})
+  t.is(streaming.ports.length, 4, 'reserves transfer ports')
+  t.ok(streaming.in instanceof StreamDrive)
+  t.ok(streaming.out instanceof StreamDrive)
+})
+
+test('sandbox on disk mounts a staging directory', function (t) {
+  const disk = new Sandbox({})
+
+  t.ok(disk.staging)
+  t.is(Object.keys(disk.mounts).length, 2)
+  t.is(disk.mounts['/sandbox/in'].readonly, true)
+  t.is(disk.mounts['/sandbox/out'].readonly, undefined)
 })
 
 test('cpio encodes a valid newc archive', function (t) {

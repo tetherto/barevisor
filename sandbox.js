@@ -6,25 +6,41 @@ const Localdrive = require('localdrive')
 const quote = require('./lib/shell-quote')
 const Linux = require('./')
 const SandboxImage = require('./lib/image/sandbox')
+const PortPool = require('./lib/port-pool')
+const StreamDrive = require('./lib/stream-drive')
 
 module.exports = class Sandbox extends Linux {
   constructor(opts = {}) {
     const dir = opts.dir || path.join(os.tmpdir(), 'linux-sandbox-' + process.pid)
     const image = opts.image || new SandboxImage(opts)
+    const disk = opts.disk ?? true
+    const transfers = disk ? [] : ports(image.agentPort + 1, opts.transfers ?? 4)
 
     super({
       ...opts,
+      dir,
       image,
-      mounts: {
-        ...opts.mounts,
-        [image.workspace + '/in']: { path: path.join(dir, 'in'), readonly: true },
-        [image.workspace + '/out']: { path: path.join(dir, 'out') }
-      }
+      ports: [...(opts.ports || []), ...transfers],
+      mounts: disk
+        ? {
+            ...opts.mounts,
+            [image.workspace + '/in']: { path: path.join(dir, 'in'), readonly: true },
+            [image.workspace + '/out']: { path: path.join(dir, 'out') }
+          }
+        : opts.mounts
     })
 
-    this.dir = dir
-    this.in = new Localdrive(path.join(dir, 'in'))
-    this.out = new Localdrive(path.join(dir, 'out'))
+    this.disk = disk
+    this.staging = disk ? dir : null
+    this.pool = new PortPool(transfers)
+
+    if (disk) {
+      this.in = new Localdrive(path.join(dir, 'in'))
+      this.out = new Localdrive(path.join(dir, 'out'))
+    } else {
+      this.in = new StreamDrive(this, image.workspace + '/in', { pool: this.pool })
+      this.out = new StreamDrive(this, image.workspace + '/out', { pool: this.pool })
+    }
 
     this.offline = opts.offline ?? false
     this.env = { NODE_PATH: '/usr/local/lib/node_modules', ...opts.env }
@@ -72,9 +88,11 @@ module.exports = class Sandbox extends Linux {
   }
 
   async _open() {
-    await fs.promises.mkdir(path.join(this.dir, 'in'), { recursive: true })
-    await fs.promises.mkdir(path.join(this.dir, 'out'), { recursive: true })
-    await fs.promises.chmod(path.join(this.dir, 'out'), 0o777)
+    if (this.disk) {
+      await fs.promises.mkdir(path.join(this.staging, 'in'), { recursive: true })
+      await fs.promises.mkdir(path.join(this.staging, 'out'), { recursive: true })
+      await fs.promises.chmod(path.join(this.staging, 'out'), 0o777)
+    }
 
     await super._open()
 
@@ -83,6 +101,12 @@ module.exports = class Sandbox extends Linux {
 
   async _close() {
     await super._close()
-    await fs.promises.rm(this.dir, { recursive: true, force: true })
+    if (this.disk) await fs.promises.rm(this.staging, { recursive: true, force: true })
   }
+}
+
+function ports(base, count) {
+  const ports = []
+  for (let i = 0; i < count; i++) ports.push(base + i)
+  return ports
 }

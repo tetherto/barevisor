@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { Duplex } from 'streamx'
+import { Duplex, Readable, Writable } from 'streamx'
 import ReadyResource from 'ready-resource'
 
 export interface Drive {
@@ -125,6 +125,40 @@ export class VM extends ReadyResource {
 
   exec(command: string, opts?: ExecOptions): Promise<ExecResult>
   connect(port: number): Duplex
+}
+
+export interface Entry {
+  key: string
+  value: { blob: { byteLength: number } }
+}
+
+export interface StreamDriveOptions {
+  pool?: PortPool
+}
+
+export class PortPool {
+  constructor(ports: number[])
+
+  readonly ports: number[]
+
+  acquire(): Promise<number>
+  release(port: number): void
+}
+
+export class StreamDrive {
+  constructor(vm: VM, root: string, opts?: StreamDriveOptions)
+
+  readonly vm: VM
+  readonly root: string
+
+  ready(): Promise<void>
+  entry(key: string): Promise<Entry | null>
+  get(key: string): Promise<Buffer>
+  put(key: string, data: Buffer): Promise<void>
+  del(key: string): Promise<void>
+  list(): AsyncIterable<{ key: string }>
+  createReadStream(key: string): Readable
+  createWriteStream(key: string): Writable
 }
 
 export default class Linux extends VM {

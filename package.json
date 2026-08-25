@@ -15,7 +15,8 @@
     "./http-drive": "./lib/http-drive.js",
     "./agent": "./agent/index.js",
     "./sandbox": "./sandbox.js",
-    "./image/sandbox": "./lib/image/sandbox.js"
+    "./image/sandbox": "./lib/image/sandbox.js",
+    "./stream-drive": "./lib/stream-drive.js"
   },
   "imports": {
     "#driver": {
