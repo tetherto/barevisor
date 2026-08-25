@@ -1,5 +1,5 @@
 // Same deck as sandbox-pptx.js, except nothing is shared with the host
-// filesystem: the script goes in and the artifact comes back over vsock, so
+// filesystem: the script goes in and the artifact comes back over a port, so
 // the only copy of either is in guest memory.
 //
 //   node example/sandbox-stream.js
@@ -7,8 +7,6 @@
 const process = require('process')
 const b4a = require('b4a')
 const Sandbox = require('../sandbox')
-const Localdrive = require('localdrive')
-const path = require('path')
 
 const DECK = `
 from pptx import Presentation
@@ -52,9 +50,8 @@ async function main() {
 
   console.log('streamed', bytes, 'bytes off the guest, host staging dir:', sandbox.staging)
 
-  // pipe it out
-  // const out = new Localdrive(path.join(__dirname, 'out'))
-  // sandbox.out.createReadStream('/deck.pptx').pipe(out.createWriteStream('deck.pptx'))
+  // to land it on disk, pipe it into a Localdrive:
+  //   sandbox.out.createReadStream('/deck.pptx').pipe(drive.createWriteStream('deck.pptx'))
 
   await sandbox.close()
 }
