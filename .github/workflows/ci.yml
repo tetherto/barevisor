@@ -23,3 +23,16 @@ jobs:
     steps:
       - uses: holepunchto/actions/bare-base@v1
       - run: npm test
+  boot:
+    runs-on: ubuntu-latest
+    name: Boot
+    timeout-minutes: 25
+    steps:
+      - uses: holepunchto/actions/node-base@v1
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+      - name: Report accelerator
+        run: test -r /dev/kvm -a -w /dev/kvm && echo kvm || echo 'tcg (no /dev/kvm)'
+      - run: node example/port-echo.js
+      - run: node example/exec-python.js
+      - run: node example/sandbox-stream.js
+      - run: node example/sandbox-offline.js

@@ -1,7 +1,7 @@
-// Boots a guest, starts an echo server on a vsock port and round-trips a
-// message over vm.connect().
+// Boots a guest, starts an echo server on a port and round-trips a message
+// over vm.connect().
 //
-//   node example/vsock-echo.js
+//   node example/port-echo.js
 
 const process = require('process')
 const Linux = require('..')
@@ -17,7 +17,8 @@ async function main() {
   const vm = new Linux({ ports: [PORT] })
 
   await vm.ready()
-  await vm.exec(`socat VSOCK-LISTEN:${PORT},reuseaddr,fork EXEC:/bin/cat >/dev/null 2>&1 &`)
+
+  const listener = await vm.listen(PORT, 'EXEC:/bin/cat')
 
   const socket = vm.connect(PORT)
   socket.write('hello from the host\n')
@@ -26,5 +27,6 @@ async function main() {
   console.log('guest echoed:', reply.toString().trim())
 
   socket.destroy()
+  await listener.close()
   await vm.close()
 }

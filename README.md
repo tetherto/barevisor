@@ -2,7 +2,7 @@
 
 Boot sandboxed Linux VMs from JavaScript.
 
-Spin up a lightweight Linux guest, run commands in it, stream data in and out over vsock, and tear it down — for running untrusted or platform-specific code (Python packages, network simulations, build steps) from tests and tools.
+Spin up a lightweight Linux guest, run commands in it, stream data in and out over a host-to-guest port, and tear it down — for running untrusted or platform-specific code (Python packages, network simulations, build steps) from tests and tools.
 
 Runs on Node and Bare. Builtins resolve through package imports (`bare-fs`, `bare-net`, `bare-subprocess`, …) and Bare picks the platform driver statically via the `#driver` import map — Node falls back to runtime dispatch.
 
@@ -44,9 +44,9 @@ Options:
   cpus: 1,             // guest cpu count
   memory: '1gb',       // memory as '4gb', '512mb' or a number in MiB
   mounts: {},          // { '/guest/path': '/host/path' } shared via virtio-fs
-  ports: [],           // extra vsock ports to expose, see vm.connect
+  ports: [],           // extra guest ports to expose, see vm.connect
   image: null,         // an Image, or { kernel, initrd, cmdline } / { disk } paths
-  debug: false         // stream the guest console and vfkit output to stdio
+  debug: false         // stream the guest console and hypervisor output to stdio
 }
 ```
 
@@ -64,7 +64,24 @@ Commands run as root. To run untrusted code, use the sandbox below.
 
 #### `const socket = vm.connect(port)`
 
-Open a duplex stream to a vsock port in the guest. The port must be listed in `opts.ports` (or be the agent port) at boot.
+Open a duplex stream to a port in the guest. The port must be listed in `opts.ports` (or be the agent port) at boot.
+
+The transport is per-platform — vsock on macOS, virtio-serial under qemu — and either way it terminates on a unix socket the host dials. On Linux a port carries **one connection at a time**; on macOS it accepts many.
+
+#### `const listener = await vm.listen(port, address)`
+
+The other half of `vm.connect`: start a listener on a guest port and wire it to a [socat](http://www.dest-unreach.org/socat/) address, without having to know what the transport is on this platform.
+
+```js
+const listener = await vm.listen(1234, 'EXEC:/bin/cat')
+
+const socket = vm.connect(1234)
+socket.write('hello\n')
+
+await listener.close()
+```
+
+`await listener.connect()` dials the port, retrying until the guest is listening. `await listener.close()` reaps the listener and frees the port. This is what `StreamDrive` moves bytes over.
 
 #### `await vm.close()`
 
@@ -72,7 +89,7 @@ Shut the VM down. Idempotent.
 
 #### `require('linux/vm')`
 
-The base class all drivers extend. Implement `_start()`, `_stop()` and `_connect(port)` to add a backend.
+The base class all drivers extend. Implement `_start()`, `_stop()` and `_connect(port)` to add a backend. Override `transport`, `guestAddress(port)` and `guestReady` if the guest side of `vm.connect` is not vsock, and `mountType`/`mountOptions` if shared directories are not virtio-fs.
 
 ## Sandbox
 
@@ -111,7 +128,7 @@ Takes everything `Linux` and `Alpine` take, plus:
   user: 'sandbox',     // unprivileged user that runs the code
   uid: 1000,
   workspace: '/sandbox',
-  disk: true,          // false streams in/out over vsock instead of mounting
+  disk: true,          // false streams in/out over guest ports instead of mounting
   transfers: 4,        // concurrent transfers when disk is false
   env: {},             // environment exported for every run
   cpuTime: 30,         // rlimit on cpu seconds, also the default run timeout
@@ -137,7 +154,7 @@ install: [Sandbox.pip(['python-pptx']), Sandbox.npm(['left-pad'])]
 
 ### Streaming
 
-`disk: false` shares no host directory. The workspace is the guest's own tmpfs — the initramfs root is already RAM — and `in`/`out` become `StreamDrive` instances that move bytes over vsock, so a file's only copy is in guest memory unless you write it somewhere yourself.
+`disk: false` shares no host directory. The workspace is the guest's own tmpfs — the initramfs root is already RAM — and `in`/`out` become `StreamDrive` instances that move bytes over guest ports, so a file's only copy is in guest memory unless you write it somewhere yourself.
 
 ```js
 const sandbox = new Sandbox({ disk: false, packages: ['python3'] })
@@ -153,7 +170,7 @@ sandbox.out.createReadStream('/deck.pptx').pipe(drive.createWriteStream('/deck.p
 
 Reads stream at any size. Writes buffer the payload on the host before sending it, because vfkit never propagates a socket close into the guest: neither side can use EOF to end a transfer, so both directions are bounded by an explicit byte count, which reads take from the file and writes from the payload. Inputs are usually small, so buffering them is cheap; large artifacts move in the direction that streams. Agent v2 replaces this with framed channels and removes both the buffering and the transfer port pool.
 
-Transfers need a vsock port each, reserved at boot, so `transfers` caps how many can run at once.
+Transfers need a guest port each, reserved at boot, so `transfers` caps how many can run at once.
 
 ### What the sandbox does and does not guarantee
 
@@ -163,7 +180,7 @@ What it does not do yet:
 
 - **Network egress is not restricted by default.** Packages install at boot over the network, so `offline: true` drops the interface _after_ the install — it does not stop a package's install from reaching the network in the first place. A guest image with packages baked in removes that window; see the roadmap.
 - **`--ignore-scripts` breaks native modules.** Anything that compiles or downloads a binary during install will not work, because that is exactly the code being suppressed. Use prebuilt wheels via a mount instead.
-- **`disk: false` keeps file contents off the host, not the VM's own bookkeeping.** vfkit's vsock sockets and the kernel console log still live in a temp directory, and guest RAM can be paged out by the host, so this is not a defence against disk forensics.
+- **`disk: false` keeps file contents off the host, not the VM's own bookkeeping.** the hypervisor's port sockets and the kernel console log still live in a temp directory, and guest RAM can be paged out by the host, so this is not a defence against disk forensics.
 
 ## Images
 
@@ -219,7 +236,7 @@ The base class, for any other distro. `drive` is anything with `ready()` and `ge
   keys: { kernel: '/vmlinuz', initrd: '/initramfs' },
   cmdline: 'console=hvc0',
   agent: true,         // append the guest agent to the initramfs as a cpio overlay
-  agentPort: 5555,     // vsock port the guest agent listens on
+  agentPort: 5555,     // guest port the agent listens on
   network: false,      // whether the guest needs a NAT network
   timeout: 30000       // how long to wait for the agent after boot
 }
@@ -229,17 +246,33 @@ Subclass it and override `overlay()` to add your own files to the initramfs. `aw
 
 ### Guest agent
 
-`require('linux/agent')` is a small server the guest runs at boot. It listens on a unix socket (bridged to vsock with socat) and answers newline-delimited JSON requests — `ping` and `exec`. `Image` packs it into the initramfs for you. Because it is plain JavaScript it is also runnable on the host, which is how this package's test suite exercises the full boot/exec/close contract without a hypervisor.
+`require('linux/agent')` is a small server the guest runs at boot. It listens on a unix socket (bridged to the host with socat) and answers newline-delimited JSON requests — `ping` and `exec`. `Image` packs it into the initramfs for you. Because it is plain JavaScript it is also runnable on the host, which is how this package's test suite exercises the full boot/exec/close contract without a hypervisor.
 
 ## Drivers
 
 | Platform | Backend                            | Status      |
 | -------- | ---------------------------------- | ----------- |
 | darwin   | Virtualization.framework via vfkit | implemented |
-| linux    | qemu/KVM                           | planned     |
+| linux    | qemu                               | implemented |
 | win32    | Hyper-V                            | planned     |
 
 On macOS install [vfkit](https://github.com/crc-org/vfkit) with `brew install vfkit`. vfkit ships the `com.apple.security.virtualization` entitlement, which is why it is used instead of an unsigned helper binary.
+
+### Linux
+
+Install qemu — `apt install qemu-system-x86`, `dnf install qemu-kvm`, `pacman -S qemu-base` — and nothing else. Pass `qemu` to point at a specific binary, or set `LINUX_QEMU`.
+
+KVM is used when `/dev/kvm` is readable and writable, otherwise the guest runs under tcg emulation, which needs no privileges at all but is much slower. Either way it boots. The choice is reported on `vm.accel` and can be forced with `accel: 'kvm' | 'tcg'`. On Debian and Ubuntu `/dev/kvm` is `0660 root:kvm`, so KVM needs `sudo usermod -aG kvm $USER` and a fresh login; Arch and Fedora ship it world-accessible.
+
+`mounts` prefers `virtiofsd` and falls back to virtio-9p when it is not installed. RHEL builds qemu without 9p, so install `virtiofsd` there, or use the sandbox with `disk: false`, which shares nothing.
+
+Guest ports are virtio-serial ports rather than vsock, because qemu cannot bridge vsock to a host unix socket and neither Node nor Bare can open an `AF_VSOCK` socket. That needs no kernel modules and no network, so it keeps working with the guest network down.
+
+#### Snap and flatpak
+
+Both sandboxes hide the host's qemu, so bundle it in the app; `$SNAP/usr/bin` and `/app/bin` are searched. A bundled qemu also needs its `pc-bios` blobs — point at them with `datadir` or `LINUX_QEMU_DATADIR`.
+
+For KVM, a flatpak manifest needs `--device=kvm` in `finish-args` and a snap needs `snap connect <snap>:kvm`, neither of which the library can grant itself. Without them everything still runs, under tcg.
 
 ## Examples
 
@@ -247,7 +280,7 @@ On macOS install [vfkit](https://github.com/crc-org/vfkit) with `brew install vf
 - `node example/sandbox-pptx.js` — build a PowerPoint deck with python-pptx in a sealed guest and read it back
 - `node example/sandbox-stream.js` — the same deck with nothing shared with the host filesystem
 - `node example/sandbox-offline.js` — install packages at boot, then run with the network dropped
-- `node example/vsock-echo.js` — round-trip a message over a vsock port with `vm.connect()`
+- `node example/port-echo.js` — round-trip a message over a guest port with `vm.connect()`
 
 Both run under `bare` too.
 
@@ -255,6 +288,7 @@ Both run under `bare` too.
 
 - **Guest image pipeline** — a purpose-built Alpine image (modern kernel with `sch_netem`, network namespaces, Python, Bare preinstalled, agent baked in), built in CI and seeded over Hyperdrive with the HTTPS mirror as fallback. Drops the apk install at boot, so guests no longer need network.
 - **Agent v2** — replace the JSON-line protocol with Protomux + compact-encoding channels, adding streaming `spawn` with live stdio.
+- **win32** — a Hyper-V driver, the last platform without one.
 - **`badnet`** — a separate package composed on this one: boot a VM, carve it into network namespaces, and degrade links (latency, jitter, loss) live from tests.
 
 ## License

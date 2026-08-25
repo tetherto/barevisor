@@ -1,12 +1,16 @@
 const fs = require('fs')
+const net = require('net')
 const os = require('os')
 const path = require('path')
+const process = require('process')
 const zlib = require('zlib')
 const test = require('brittle')
 
 const b4a = require('b4a')
 const Linux = require('..')
 const VM = require('../lib/vm')
+const LinuxVM = require('../lib/vm/linux')
+const which = require('../lib/vm/which')
 const Image = require('../lib/image')
 const Alpine = require('../lib/image/alpine')
 const cpio = require('../lib/cpio')
@@ -385,6 +389,37 @@ test('stream drive reads nothing for a missing key', async function (t) {
   await t.exception(drive.get('/missing.txt'), /Not found/)
 })
 
+test('stream drive writes over a listener on a pooled port', async function (t) {
+  const guest = new MockGuest()
+  const drive = new StreamDrive(guest, '/sandbox/out', { pool: new PortPool([5556]) })
+
+  await drive.put('/x.txt', b4a.from('hello'))
+
+  const socat = guest.commands.find((command) => command.includes('socat'))
+
+  t.ok(socat.includes('VSOCK-LISTEN:5556,reuseaddr'))
+  t.ok(socat.includes('head -c 5'))
+  t.ok(socat.includes('/sandbox/out/x.txt'))
+  t.ok(socat.includes("grep -q 'listening on'"))
+  t.ok(guest.commands.some((command) => command.includes('kill -9 123')))
+})
+
+test('stream drive skips the bind wait when the backend queues writes', async function (t) {
+  const guest = new MockGuest()
+
+  guest.guestReady = null
+  guest.guestAddress = (port) => 'GOPEN:$(/agent/vport port-' + port + ')'
+
+  const drive = new StreamDrive(guest, '/sandbox/out', { pool: new PortPool([5556]) })
+
+  await drive.put('/x.txt', b4a.from('hello'))
+
+  const socat = guest.commands.find((command) => command.includes('socat'))
+
+  t.ok(socat.includes('GOPEN:$(/agent/vport port-5556)'))
+  t.absent(socat.includes('listening on'))
+})
+
 test('sandbox in stream mode shares no host directory', function (t) {
   const streaming = new Sandbox({ disk: false })
 
@@ -423,11 +458,184 @@ test('cpio encodes a valid newc archive', function (t) {
   t.is(archive.length % 4, 0)
 })
 
+test('the guest listener follows the driver transport', function (t) {
+  const vsock = new MockVM()
+
+  t.is(vsock.transport, 'vsock')
+  t.is(vsock.guestAddress(5555), 'VSOCK-LISTEN:5555,reuseaddr')
+  t.is(vsock.guestReady, 'listening on')
+
+  const vport = linux(t)
+
+  t.is(vport.transport, 'vport')
+  t.is(vport.guestAddress(5555), 'GOPEN:$(/agent/vport port-5555)')
+  t.is(vport.guestReady, null)
+})
+
+test('the image is told which transport the driver speaks', function (t) {
+  t.is(new MockVM().image.transport, 'vsock')
+  t.is(linux(t).image.transport, 'vport')
+})
+
+test('alpine listens on the transport the driver speaks', function (t) {
+  const image = new Alpine({})
+
+  t.ok(image.init().includes('socat VSOCK-LISTEN:5555,reuseaddr,fork'))
+
+  image.transport = 'vport'
+
+  t.ok(image.init().includes('socat GOPEN:$(/agent/vport port-5555)'))
+  t.absent(image.init().includes('vmw_vsock_virtio_transport'))
+})
+
+test('the vport resolver is only packed for the vport transport', async function (t) {
+  const vsock = await new Image(null, {}).overlay()
+  t.absent(vsock.some((entry) => entry.name === 'agent/vport'))
+
+  const vport = await new Image(null, { transport: 'vport' }).overlay()
+  const entry = vport.find((entry) => entry.name === 'agent/vport')
+
+  t.is(entry.mode, 0o100755)
+  t.ok(b4a.toString(entry.data).includes('/sys/class/virtio-ports'))
+})
+
+test('mounts use the fs type and options the driver asks for', async function (t) {
+  const commands = []
+  const vm = new MockVM({ mounts: { '/work': '/tmp', '/ro': { path: '/tmp', readonly: true } } })
+
+  vm._rpc = () => ({ exec: (command) => commands.push(command) })
+  vm.mountType = '9p'
+  vm.mountOptions = 'trans=virtio'
+
+  await vm._mountAll()
+
+  t.alike(commands, [
+    'mkdir -p "/work" && mount -t 9p -o trans=virtio work "/work"',
+    'mkdir -p "/ro" && mount -t 9p -o trans=virtio,ro ro "/ro"'
+  ])
+})
+
+test('the agent wait gives up when the socket connects but never answers', async function (t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'linux-silent-'))
+  const socket = path.join(dir, 'agent.sock')
+  const accepted = []
+
+  const server = net.createServer((connection) => accepted.push(connection))
+  await new Promise((resolve) => server.listen(socket, resolve))
+
+  t.teardown(async function () {
+    for (const connection of accepted) connection.destroy()
+    await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  const vm = new (class extends VM {
+    _connect() {
+      return net.connect(socket)
+    }
+    _start() {}
+    _stop() {}
+  })({ timeout: 1 })
+
+  await t.exception(vm.ready(), /Timed out waiting for guest agent/)
+  t.ok(accepted.length > 0)
+})
+
+test('linux boots the image kernel directly', function (t) {
+  const args = linux(t, { image: { kernel: '/vmlinuz', initrd: '/initramfs' } })._args()
+
+  t.is(args[args.indexOf('-kernel') + 1], '/vmlinuz')
+  t.is(args[args.indexOf('-initrd') + 1], '/initramfs')
+  t.is(args[args.indexOf('-append') + 1], 'console=hvc0')
+})
+
+test('linux pairs -cpu with the accelerator', function (t) {
+  const kvm = linux(t, { accel: 'kvm' })._args()
+  const tcg = linux(t, { accel: 'tcg' })._args()
+
+  t.is(kvm[kvm.indexOf('-accel') + 1], 'kvm')
+  t.is(kvm[kvm.indexOf('-cpu') + 1], 'host')
+  t.is(tcg[tcg.indexOf('-accel') + 1], 'tcg')
+  t.is(tcg[tcg.indexOf('-cpu') + 1], 'max')
+})
+
+test('linux keeps the console on port 0 and numbers the rest', function (t) {
+  const devices = values(linux(t, { ports: [1234, 5678] })._args(), '-device')
+
+  t.ok(devices.includes('virtconsole,bus=vs0.0,chardev=con0,nr=0'))
+  t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5555,nr=1,name=port-5555'))
+  t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p1234,nr=2,name=port-1234'))
+  t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5678,nr=3,name=port-5678'))
+})
+
+test('linux serves every port on its own unix socket', function (t) {
+  const vm = linux(t, { ports: [1234] })
+  const chardevs = values(vm._args(), '-chardev')
+
+  for (const port of [5555, 1234]) {
+    t.ok(
+      chardevs.includes(
+        'socket,id=p' + port + ',path=' + vm._socketPath(port) + ',server=on,wait=off'
+      )
+    )
+  }
+})
+
+test('linux shares directories over 9p without a helper daemon', function (t) {
+  const vm = linux(t, { mounts: { '/work': '/tmp', '/ro': { path: '/tmp', readonly: true } } })
+
+  vm.mountType = '9p'
+
+  t.alike(values(vm._args(), '-fsdev'), [
+    'local,id=fswork,path=/tmp,security_model=none,multidevs=remap',
+    'local,id=fsro,path=/tmp,security_model=none,multidevs=remap,readonly=on'
+  ])
+  t.ok(values(vm._args(), '-device').includes('virtio-9p-pci,fsdev=fswork,mount_tag=work'))
+  t.absent(vm._args().includes('-object'))
+})
+
+test('linux shares directories over virtiofs on shared memory', function (t) {
+  const vm = linux(t, { mounts: { '/work': '/tmp' }, memory: '2gb' })
+  const args = vm._args()
+
+  t.is(args[args.indexOf('-machine') + 1], 'q35,memory-backend=mem')
+  t.is(args[args.indexOf('-object') + 1], 'memory-backend-memfd,id=mem,size=2048M,share=on')
+  t.ok(values(args, '-device').includes('vhost-user-fs-pci,chardev=fswork,tag=work'))
+})
+
+test('linux only adds a network device when the image wants one', function (t) {
+  t.absent(linux(t, { network: false })._args().includes('-netdev'))
+  t.is(linux(t, { network: true })._args().indexOf('-netdev') > -1, true)
+})
+
+test('which resolves absolute candidates and gives up on unknown names', function (t) {
+  t.is(which(['linux-not-a-real-binary', process.execPath]), process.execPath)
+  t.is(which(['linux-not-a-real-binary']), null)
+})
+
 async function create(t) {
   const vm = new MockVM()
   t.teardown(() => vm.close())
   await vm.ready()
   return vm
+}
+
+function linux(t, opts = {}) {
+  const vm = new LinuxVM({
+    image: { kernel: '/vmlinuz' },
+    qemu: '/usr/bin/qemu-system-x86_64',
+    accel: 'kvm',
+    arch: 'x86_64',
+    ...opts
+  })
+
+  t.teardown(() => fs.rmSync(vm.dir, { recursive: true, force: true }))
+
+  return vm
+}
+
+function values(args, flag) {
+  return args.filter((value, i) => args[i - 1] === flag)
 }
 
 function cache(t) {

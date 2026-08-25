@@ -20,6 +20,7 @@ export interface ImageOptions {
   agentPort?: number
   network?: boolean
   timeout?: number
+  transport?: string
 }
 
 export interface CpioEntry {
@@ -41,6 +42,7 @@ export class Image extends ReadyResource {
   initrd: string | null
   disk: string | null
   cmdline: string
+  transport: string
 
   readonly agent: boolean
   readonly agentPort: number
@@ -69,6 +71,7 @@ export class Alpine extends Image {
   readonly netboot: string
   readonly packages: string[]
 
+  listener(): string
   init(): string
 }
 
@@ -108,6 +111,16 @@ export interface VMOptions {
   agent?: boolean
   agentPort?: number
   timeout?: number
+  debug?: boolean
+  dir?: string
+  /** linux only */
+  qemu?: string
+  /** linux only, 'kvm' or 'tcg', probed from /dev/kvm when unset */
+  accel?: string
+  /** linux only, falls back to virtio-9p when not found */
+  virtiofsd?: string
+  /** linux only, passed to qemu as -L for a bundled pc-bios */
+  datadir?: string
 }
 
 export class VM extends ReadyResource {
@@ -122,9 +135,33 @@ export class VM extends ReadyResource {
   readonly agent: boolean
   readonly agentPort: number
   readonly timeout: number
+  readonly transport: string
+  readonly guestReady: string | null
 
+  mountType: string
+  mountOptions: string
+
+  guestAddress(port: number): string
   exec(command: string, opts?: ExecOptions): Promise<ExecResult>
   connect(port: number): Duplex
+  listen(port: number, address: string, opts?: ListenOptions): Promise<Listener>
+}
+
+export interface ListenOptions {
+  writing?: boolean
+}
+
+export class Listener extends ReadyResource {
+  constructor(vm: VM, port: number, address: string, opts?: ListenOptions)
+
+  readonly vm: VM
+  readonly port: number
+  readonly address: string
+  readonly writing: boolean
+  readonly pid: number
+
+  connect(): Promise<Duplex>
+  finished(): Promise<ExecResult>
 }
 
 export interface Entry {
