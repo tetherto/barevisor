@@ -1,0 +1,76 @@
+name: Integrate
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - uses: holepunchto/actions/node-base@v1
+      - run: npm run lint
+  test:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    name: Test / ${{ matrix.os }}
+    steps:
+      - uses: holepunchto/actions/bare-base@v1
+      - run: npm test
+  boot:
+    runs-on: ubuntu-latest
+    name: Boot
+    steps:
+      - uses: holepunchto/actions/node-base@v1
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+      # the runner has /dev/kvm but not the group that owns it, and tcg is far
+      # too slow to boot alpine and apk install inside a job
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Report accelerator
+        run: test -r /dev/kvm -a -w /dev/kvm && echo kvm || echo 'tcg (no /dev/kvm)'
+      - name: Kernel smoke test
+        timeout-minutes: 5
+        run: |
+          node -e '
+            const Barevisor = require(".")
+            const vm = new Barevisor({ agent: false, debug: true })
+            vm.ready()
+              .then(() => new Promise((resolve) => setTimeout(resolve, 25000)))
+              .then(() => vm.close())
+              .catch((err) => {
+                console.error(err)
+                process.exit(1)
+              })
+          '
+      - run: node example/port-echo.js
+        timeout-minutes: 3
+      - run: node example/exec-python.js
+        timeout-minutes: 6
+      - run: node example/sandbox-stream.js
+        timeout-minutes: 6
+      - run: node example/sandbox-offline.js
+        timeout-minutes: 6
+      # a step that times out leaves nothing behind, so surface what the guest
+      # printed before it wedged
+      - name: Guest console
+        if: always()
+        run: |
+          for log in /tmp/barevisor-vm-*/console.log /tmp/barevisor-sandbox-*/console.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log"
+            tail -100 "$log"
+          done
+          for log in /tmp/barevisor-vm-*/stderr.log /tmp/barevisor-sandbox-*/stderr.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log"
+            tail -40 "$log"
+          done

@@ -1,0 +1,106 @@
+{
+  "name": "barevisor",
+  "version": "0.0.0",
+  "description": "Cross-platform sandboxed VMs for Node and Bare",
+  "main": "index.js",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./vm": "./lib/vm/index.js",
+    "./image": "./lib/image/index.js",
+    "./alpine": "./lib/image/alpine.js",
+    "./http-drive": "./lib/http-drive.js",
+    "./agent": "./agent/index.js",
+    "./sandbox": "./sandbox.js",
+    "./image/sandbox": "./lib/image/sandbox.js",
+    "./stream-drive": "./lib/stream-drive.js"
+  },
+  "imports": {
+    "#driver": {
+      "darwin": "./lib/vm/darwin.js",
+      "linux": "./lib/vm/linux.js",
+      "win32": "./lib/vm/win32.js",
+      "default": "./lib/vm/driver.js"
+    },
+    "child_process": {
+      "bare": "bare-subprocess",
+      "default": "child_process"
+    },
+    "fs": {
+      "bare": "bare-fs",
+      "default": "fs"
+    },
+    "net": {
+      "bare": "bare-net",
+      "default": "net"
+    },
+    "process": {
+      "bare": "bare-process",
+      "default": "process"
+    },
+    "zlib": {
+      "bare": "bare-zlib",
+      "default": "zlib"
+    },
+    "#fetch": {
+      "bare": "bare-fetch",
+      "default": "./lib/fetch.js"
+    },
+    "os": {
+      "bare": "bare-os",
+      "default": "os"
+    },
+    "path": {
+      "bare": "bare-path",
+      "default": "path"
+    }
+  },
+  "files": [
+    "package.json",
+    "index.js",
+    "index.d.ts",
+    "lib",
+    "agent",
+    "sandbox.js"
+  ],
+  "scripts": {
+    "format": "prettier . --write",
+    "test": "brittle-node test/index.js && brittle-bare test/index.js",
+    "lint": "prettier . --check && lunte && tsc --noEmit --skipLibCheck --strict --target es2022 --moduleResolution node index.d.ts"
+  },
+  "dependencies": {
+    "b4a": "^1.8.1",
+    "bare-fetch": "^3.2.0",
+    "bare-fs": "^4.7.3",
+    "bare-net": "^2.3.2",
+    "bare-os": "^3.9.3",
+    "bare-path": "^3.0.1",
+    "bare-process": "^4.5.1",
+    "bare-storage": "^1.1.0",
+    "bare-subprocess": "^6.1.0",
+    "bare-zlib": "^1.4.1",
+    "localdrive": "^2.2.1",
+    "ready-resource": "^1.1.1",
+    "streamx": "^2.28.0"
+  },
+  "devDependencies": {
+    "brittle": "^3.19.0",
+    "lunte": "^1.2.0",
+    "prettier": "^3.6.2",
+    "prettier-config-holepunch": "^2.0.0",
+    "typescript": "^5.9.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tetherto/barevisor.git"
+  },
+  "author": "Tether Inc",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/tetherto/barevisor/issues"
+  },
+  "homepage": "https://github.com/tetherto/barevisor#readme"
+}
