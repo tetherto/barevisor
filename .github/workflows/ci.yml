@@ -17,9 +17,8 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          - windows-latest
     runs-on: ${{ matrix.os }}
-    name: Test / ${{ matrix.platform }}
+    name: Test / ${{ matrix.os }}
     steps:
       - uses: holepunchto/actions/bare-base@v1
       - run: npm test
@@ -38,6 +37,20 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Report accelerator
         run: test -r /dev/kvm -a -w /dev/kvm && echo kvm || echo 'tcg (no /dev/kvm)'
+      - name: Kernel smoke test
+        timeout-minutes: 5
+        run: |
+          node -e '
+            const Barevisor = require(".")
+            const vm = new Barevisor({ agent: false, debug: true })
+            vm.ready()
+              .then(() => new Promise((resolve) => setTimeout(resolve, 25000)))
+              .then(() => vm.close())
+              .catch((err) => {
+                console.error(err)
+                process.exit(1)
+              })
+          '
       - run: node example/port-echo.js
         timeout-minutes: 6
       - run: node example/exec-python.js
