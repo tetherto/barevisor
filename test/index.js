@@ -524,7 +524,7 @@ test('mounts use the fs type and options the driver asks for', async function (t
   ])
 })
 
-test('the agent wait gives up when the socket connects but never answers', async function (t) {
+test('the agent wait retries on one connection and gives up when it is never answered', async function (t) {
   const socket = socketPath('barevisor-silent-' + process.pid)
   const accepted = []
 
@@ -542,10 +542,11 @@ test('the agent wait gives up when the socket connects but never answers', async
     }
     _start() {}
     _stop() {}
-  })({ timeout: 1 })
+    // long enough for more than one ping attempt, so a reconnect would show up
+  })({ timeout: 3000 })
 
   await t.exception(vm.ready(), /Timed out waiting for guest agent/)
-  t.ok(accepted.length > 0)
+  t.is(accepted.length, 1)
 })
 
 test('linux boots the image kernel directly', function (t) {
