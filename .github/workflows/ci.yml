@@ -26,13 +26,38 @@ jobs:
   boot:
     runs-on: ubuntu-latest
     name: Boot
-    timeout-minutes: 25
     steps:
       - uses: holepunchto/actions/node-base@v1
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+      # the runner has /dev/kvm but not the group that owns it, and tcg is far
+      # too slow to boot alpine and apk install inside a job
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Report accelerator
         run: test -r /dev/kvm -a -w /dev/kvm && echo kvm || echo 'tcg (no /dev/kvm)'
       - run: node example/port-echo.js
+        timeout-minutes: 6
       - run: node example/exec-python.js
+        timeout-minutes: 6
       - run: node example/sandbox-stream.js
+        timeout-minutes: 6
       - run: node example/sandbox-offline.js
+        timeout-minutes: 6
+      # a step that times out leaves nothing behind, so surface what the guest
+      # printed before it wedged
+      - name: Guest console
+        if: failure()
+        run: |
+          for log in /tmp/barevisor-vm-*/console.log /tmp/barevisor-sandbox-*/console.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log"
+            tail -100 "$log"
+          done
+          for log in /tmp/barevisor-vm-*/stderr.log /tmp/barevisor-sandbox-*/stderr.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log"
+            tail -40 "$log"
+          done

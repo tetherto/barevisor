@@ -1,6 +1,6 @@
 # barevisor
 
-Boot sandboxed VMs from JavaScript.
+Cross-platform sandboxed VMs for Node and Bare.
 
 Spin up a lightweight guest, run commands in it, stream data in and out over a host-to-guest port, and tear it down — for running untrusted or platform-specific code (Python packages, network simulations, build steps) from tests and tools.
 

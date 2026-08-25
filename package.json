@@ -1,7 +1,7 @@
 {
   "name": "barevisor",
   "version": "5.0.0",
-  "description": "Boot sandboxed VMs from JavaScript",
+  "description": "Cross-platform sandboxed VMs for Node and Bare",
   "main": "index.js",
   "exports": {
     "./package": "./package.json",

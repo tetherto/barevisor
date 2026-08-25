@@ -22,6 +22,7 @@ const PortPool = require('../lib/port-pool')
 const StreamDrive = require('../lib/stream-drive')
 const Sandbox = require('../sandbox')
 const MockGuest = require('./helpers/guest')
+const socketPath = require('./helpers/socket')
 const MockVM = require('./helpers/mock')
 const MockDrive = require('./helpers/drive')
 
@@ -524,8 +525,7 @@ test('mounts use the fs type and options the driver asks for', async function (t
 })
 
 test('the agent wait gives up when the socket connects but never answers', async function (t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'barevisor-silent-'))
-  const socket = path.join(dir, 'agent.sock')
+  const socket = socketPath('barevisor-silent-' + process.pid)
   const accepted = []
 
   const server = net.createServer((connection) => accepted.push(connection))
@@ -534,7 +534,6 @@ test('the agent wait gives up when the socket connects but never answers', async
   t.teardown(async function () {
     for (const connection of accepted) connection.destroy()
     await new Promise((resolve) => server.close(resolve))
-    fs.rmSync(dir, { recursive: true, force: true })
   })
 
   const vm = new (class extends VM {
