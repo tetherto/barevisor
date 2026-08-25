@@ -493,7 +493,8 @@ test('alpine listens on the transport the driver speaks', function (t) {
 
   image.transport = 'vport'
 
-  t.ok(image.init().includes('socat GOPEN:$(/agent/vport port-5555)'))
+  t.ok(image.init().includes('port=$(/agent/vport port-5555) || fail vport'))
+  t.ok(image.init().includes('socat GOPEN:$port UNIX-CONNECT:/run/agent.sock'))
   t.absent(image.init().includes('vmw_vsock_virtio_transport'))
 })
 
@@ -570,7 +571,7 @@ test('linux pairs -cpu with the accelerator', function (t) {
 test('linux keeps the console on port 0 and numbers the rest', function (t) {
   const devices = values(linux(t, { ports: [1234, 5678] })._args(), '-device')
 
-  t.ok(devices.includes('virtconsole,bus=vs0.0,chardev=con0,nr=0'))
+  t.ok(devices.includes('virtconsole,bus=vs0.0,chardev=con0,nr=0,name=console'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5555,nr=1,name=port-5555'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p1234,nr=2,name=port-1234'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5678,nr=3,name=port-5678'))

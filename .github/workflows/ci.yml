@@ -55,7 +55,7 @@ jobs:
               })
           '
       - run: node example/port-echo.js
-        timeout-minutes: 6
+        timeout-minutes: 3
       - run: node example/exec-python.js
         timeout-minutes: 6
       - run: node example/sandbox-stream.js
@@ -65,7 +65,7 @@ jobs:
       # a step that times out leaves nothing behind, so surface what the guest
       # printed before it wedged
       - name: Guest console
-        if: failure()
+        if: always()
         run: |
           for log in /tmp/barevisor-vm-*/console.log /tmp/barevisor-sandbox-*/console.log; do
             [ -f "$log" ] || continue
