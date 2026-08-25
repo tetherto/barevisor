@@ -1,7 +1,7 @@
 {
-  "name": "linux",
+  "name": "barevisor",
   "version": "5.0.0",
-  "description": "Boot sandboxed Linux VMs from JavaScript",
+  "description": "Boot sandboxed VMs from JavaScript",
   "main": "index.js",
   "exports": {
     "./package": "./package.json",
@@ -94,12 +94,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tetherto/linux.git"
+    "url": "git+https://github.com/tetherto/barevisor.git"
   },
   "author": "Tether Inc",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/tetherto/linux/issues"
+    "url": "https://github.com/tetherto/barevisor/issues"
   },
-  "homepage": "https://github.com/tetherto/linux#readme"
+  "homepage": "https://github.com/tetherto/barevisor#readme"
 }

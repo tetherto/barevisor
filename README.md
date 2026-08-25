@@ -1,19 +1,21 @@
-# linux
+# barevisor
 
-Boot sandboxed Linux VMs from JavaScript.
+Boot sandboxed VMs from JavaScript.
 
-Spin up a lightweight Linux guest, run commands in it, stream data in and out over a host-to-guest port, and tear it down — for running untrusted or platform-specific code (Python packages, network simulations, build steps) from tests and tools.
+Spin up a lightweight guest, run commands in it, stream data in and out over a host-to-guest port, and tear it down — for running untrusted or platform-specific code (Python packages, network simulations, build steps) from tests and tools.
+
+The default export boots an Alpine Linux guest, which is what `exec`, the agent and the sandbox are built around. `image` also takes a `{ disk }` of your own with `agent: false`, which boots whatever the host hypervisor can without the in-guest conveniences.
 
 Runs on Node and Bare. Builtins resolve through package imports (`bare-fs`, `bare-net`, `bare-subprocess`, …) and Bare picks the platform driver statically via the `#driver` import map — Node falls back to runtime dispatch.
 
 ```
-npm install linux
+npm install barevisor
 ```
 
 ## Usage
 
 ```js
-const Linux = require('linux')
+const Linux = require('barevisor')
 
 const vm = new Linux({
   cpus: 4,
@@ -29,7 +31,7 @@ const { stdout } = await vm.exec('python3 -c "print(1 + 1)"')
 await vm.close()
 ```
 
-The kernel and initramfs download to `~/.cache/linux` on first boot and are reused after.
+The kernel and initramfs download to `~/.cache/barevisor` on first boot and are reused after.
 
 ## API
 
@@ -87,16 +89,16 @@ await listener.close()
 
 Shut the VM down. Idempotent.
 
-#### `require('linux/vm')`
+#### `require('barevisor/vm')`
 
 The base class all drivers extend. Implement `_start()`, `_stop()` and `_connect(port)` to add a backend. Override `transport`, `guestAddress(port)` and `guestReady` if the guest side of `vm.connect` is not vsock, and `mountType`/`mountOptions` if shared directories are not virtio-fs.
 
 ## Sandbox
 
-`require('linux/sandbox')` runs untrusted code as an unprivileged user in a guest that has nothing in it but what you put there.
+`require('barevisor/sandbox')` runs untrusted code as an unprivileged user in a guest that has nothing in it but what you put there.
 
 ```js
-const Sandbox = require('linux/sandbox')
+const Sandbox = require('barevisor/sandbox')
 
 const sandbox = new Sandbox({
   packages: ['python3', 'py3-pip'],
@@ -189,7 +191,7 @@ An image is the thing a VM boots. It reads its files from a drive and materializ
 #### `const image = new Alpine(opts)`
 
 ```js
-const Alpine = require('linux/alpine')
+const Alpine = require('barevisor/alpine')
 ```
 
 Alpine Linux from the netboot mirror, with the guest agent baked into the initramfs.
@@ -201,7 +203,7 @@ Alpine Linux from the netboot mirror, with the guest agent baked into the initra
   arch: 'aarch64',     // defaults to the host architecture
   mirror: '...',       // alpine mirror url, used by apk inside the guest
   drive: null,         // where to read vmlinuz/initramfs from, defaults to the mirror over https
-  cache: '~/.cache/linux',
+  cache: '~/.cache/barevisor',
   agent: true          // set false for a stock image with no agent
 }
 ```
@@ -225,10 +227,10 @@ const vm = new Linux({ image: new Alpine({ drive: new Hyperdrive(store) }) })
 #### `const image = new Image(drive, opts)`
 
 ```js
-const Image = require('linux/image')
+const Image = require('barevisor/image')
 ```
 
-The base class, for any other distro. `drive` is anything with `ready()` and `get(key)` — `localdrive`, `hyperdrive` or `require('linux/http-drive')`. Pass `drive` as `null` to use `kernel`/`initrd` paths you already have on disk.
+The base class, for any other image. `drive` is anything with `ready()` and `get(key)` — `localdrive`, `hyperdrive` or `require('barevisor/http-drive')`. Pass `drive` as `null` to use `kernel`/`initrd` paths you already have on disk.
 
 ```js
 {
@@ -246,7 +248,7 @@ Subclass it and override `overlay()` to add your own files to the initramfs. `aw
 
 ### Guest agent
 
-`require('linux/agent')` is a small server the guest runs at boot. It listens on a unix socket (bridged to the host with socat) and answers newline-delimited JSON requests — `ping` and `exec`. `Image` packs it into the initramfs for you. Because it is plain JavaScript it is also runnable on the host, which is how this package's test suite exercises the full boot/exec/close contract without a hypervisor.
+`require('barevisor/agent')` is a small server the guest runs at boot. It listens on a unix socket (bridged to the host with socat) and answers newline-delimited JSON requests — `ping` and `exec`. `Image` packs it into the initramfs for you. Because it is plain JavaScript it is also runnable on the host, which is how this package's test suite exercises the full boot/exec/close contract without a hypervisor.
 
 ## Drivers
 
