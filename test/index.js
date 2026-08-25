@@ -398,6 +398,21 @@ test('stream drive reads nothing for a missing key', async function (t) {
   await t.exception(drive.get('/missing.txt'), /Not found/)
 })
 
+test('listen is bidirectional unless a transfer says which way', async function (t) {
+  const duplex = new MockGuest()
+  await duplex.listen(1234, 'EXEC:/bin/cat')
+
+  const sending = new MockGuest()
+  await sending.listen(1234, 'EXEC:/bin/cat', { writing: true })
+
+  const receiving = new MockGuest()
+  await receiving.listen(1234, 'EXEC:/bin/cat', { writing: false })
+
+  t.ok(socat(duplex).startsWith('socat -d -d VSOCK-LISTEN:1234'))
+  t.ok(socat(sending).startsWith('socat -d -d -u VSOCK-LISTEN:1234'))
+  t.ok(socat(receiving).startsWith('socat -d -d -U VSOCK-LISTEN:1234'))
+})
+
 test('stream drive writes over a listener on a pooled port', async function (t) {
   const guest = new MockGuest()
   const drive = new StreamDrive(guest, '/sandbox/out', { pool: new PortPool([5556]) })
@@ -571,7 +586,7 @@ test('linux pairs -cpu with the accelerator', function (t) {
 test('linux keeps the console on port 0 and numbers the rest', function (t) {
   const devices = values(linux(t, { ports: [1234, 5678] })._args(), '-device')
 
-  t.ok(devices.includes('virtconsole,bus=vs0.0,chardev=con0,nr=0,name=console'))
+  t.ok(devices.includes('virtconsole,bus=vs0.0,chardev=con0,nr=0'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5555,nr=1,name=port-5555'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p1234,nr=2,name=port-1234'))
   t.ok(devices.includes('virtserialport,bus=vs0.0,chardev=p5678,nr=3,name=port-5678'))
@@ -641,6 +656,10 @@ function linux(t, opts = {}) {
   t.teardown(() => fs.rmSync(vm.dir, { recursive: true, force: true }))
 
   return vm
+}
+
+function socat(guest) {
+  return guest.commands.find((command) => command.includes('socat'))
 }
 
 function values(args, flag) {

@@ -23,7 +23,10 @@ async function main() {
   const socket = vm.connect(PORT)
   socket.write('hello from the host\n')
 
-  const reply = await new Promise((resolve) => socket.once('data', resolve))
+  const reply = await new Promise((resolve, reject) => {
+    socket.once('data', resolve)
+    socket.once('error', reject)
+  })
   console.log('guest echoed:', reply.toString().trim())
 
   socket.destroy()

@@ -148,6 +148,7 @@ export class VM extends ReadyResource {
 }
 
 export interface ListenOptions {
+  /** omit for a bidirectional listener */
   writing?: boolean
 }
 
